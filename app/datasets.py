@@ -2,44 +2,51 @@
 import csv
 import io
 import json
+from typing import Any, cast
 
 from . import config
+from .store import Store
 
 LIST_FIELDS = {"expected", "must_include", "must_not_include", "tags"}
 
 
-def parse_dataset(filename: str, data: bytes) -> list[dict]:
+def parse_dataset(filename: str, data: bytes) -> list[dict[str, Any]]:
     text = data.decode("utf-8-sig", errors="replace")
     name = filename.lower()
+    cases: Any
     if name.endswith(".jsonl"):
         cases = [json.loads(ln) for ln in text.splitlines() if ln.strip()]
     elif name.endswith(".json"):
         cases = json.loads(text)
         if isinstance(cases, dict):
-            cases = cases.get("cases", [])
+            cases = cast(dict[str, Any], cases).get("cases", [])
     elif name.endswith(".csv"):
-        cases = []
+        rows: list[dict[str, Any]] = []
         for row in csv.DictReader(io.StringIO(text)):
-            case = {k.strip(): (v or "").strip() for k, v in row.items() if k and (v or "").strip()}
+            case: dict[str, Any] = {k.strip(): (v or "").strip() for k, v in row.items() if k and (v or "").strip()}
             for f in LIST_FIELDS & case.keys():  # "a | b" -> ["a", "b"]
                 case[f] = [x.strip() for x in case[f].split("|") if x.strip()]
             if "should_refuse" in case:
                 case["should_refuse"] = case["should_refuse"].lower() in ("1", "true", "yes")
-            cases.append(case)
+            rows.append(case)
+        cases = rows
     else:
         raise ValueError("Upload a .jsonl, .json or .csv file")
     return validate_cases(cases)
 
 
-def validate_cases(cases) -> list[dict]:
+def validate_cases(cases: Any) -> list[dict[str, Any]]:
     if not isinstance(cases, list) or not cases:
         raise ValueError("Dataset has no cases")
-    seen = set()
-    out = []
-    for i, c in enumerate(cases, 1):
-        if not isinstance(c, dict) or not str(c.get("input", "")).strip():
+    seen: set[str] = set()
+    out: list[dict[str, Any]] = []
+    items = cast(list[Any], cases)
+    for i, raw in enumerate(items, 1):
+        if not isinstance(raw, dict):
             raise ValueError(f"Case {i} needs an 'input'")
-        c = dict(c)
+        c = dict(cast(dict[str, Any], raw))
+        if not str(c.get("input", "")).strip():
+            raise ValueError(f"Case {i} needs an 'input'")
         c["id"] = str(c.get("id") or f"case-{i}")
         if c["id"] in seen:
             raise ValueError(f"Duplicate case id '{c['id']}'")
@@ -60,11 +67,11 @@ EXAMPLES = [
 ]
 
 
-def seed_examples(store) -> list[tuple[int, int, str]]:
+def seed_examples(store: Store) -> list[tuple[int, int, str]]:
     """Create example datasets + replay targets. Returns [(dataset_id, target_id, run_name)] to run."""
     if store.list_datasets():
         return []
-    todo = []
+    todo: list[tuple[int, int, str]] = []
     d = config.EXAMPLES_DIR
     for ds_file, desc, targets in EXAMPLES:
         path = d / "datasets" / ds_file

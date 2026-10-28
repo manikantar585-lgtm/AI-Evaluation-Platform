@@ -13,6 +13,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 from .datasets import parse_dataset
 from .metrics import DEFAULT_METRICS, METRICS
@@ -20,7 +21,7 @@ from .runner import execute_run
 from .store import Store
 
 
-def main(argv=None) -> int:
+def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="evalkit")
     sub = ap.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("run", help="evaluate a dataset against a target")
@@ -43,12 +44,12 @@ def main(argv=None) -> int:
     ds_path = Path(args.dataset)
     cases = parse_dataset(ds_path.name, ds_path.read_bytes())
     if args.target:
-        cfg = json.loads(Path(args.target).read_text(encoding="utf-8"))
+        cfg: dict[str, Any] = json.loads(Path(args.target).read_text(encoding="utf-8"))
         tname = Path(args.target).stem
     else:
         cfg = {"type": "replay", "predictions": json.loads(Path(args.predictions).read_text(encoding="utf-8"))}
         tname = Path(args.predictions).stem
-    metrics = [m.strip() for m in args.metrics.split(",")] if args.metrics else DEFAULT_METRICS
+    metrics: list[str] = [m.strip() for m in args.metrics.split(",")] if args.metrics else DEFAULT_METRICS
     unknown = [m for m in metrics if m not in METRICS]
     if unknown:
         ap.error(f"unknown metrics: {', '.join(unknown)}")
@@ -58,7 +59,7 @@ def main(argv=None) -> int:
     t = store.find_target(tname) or store.add_target(tname, cfg)
     run_id = store.create_run(f"{ds_path.stem} × {tname}", ds["id"], t["id"], metrics, {}, len(cases))
 
-    def progress(i, n):
+    def progress(i: int, n: int) -> None:
         print(f"\r  {i}/{n} cases", end="", file=sys.stderr, flush=True)
 
     summary = execute_run(store, run_id, progress)

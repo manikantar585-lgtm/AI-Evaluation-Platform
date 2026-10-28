@@ -3,7 +3,9 @@ import csv
 import io
 import json
 import threading
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
@@ -20,7 +22,7 @@ STATIC = Path(__file__).resolve().parent.parent / "static"
 
 class TargetIn(BaseModel):
     name: str = Field(min_length=1, max_length=100)
-    config: dict
+    config: dict[str, Any]
 
 
 class RunIn(BaseModel):
@@ -33,7 +35,7 @@ class RunIn(BaseModel):
 
 
 def start_run(store: Store, dataset_id: int, target_id: int, name: str | None = None,
-              metrics: list[str] | None = None, thresholds: dict | None = None, wait: bool = True) -> int:
+              metrics: list[str] | None = None, thresholds: dict[str, float] | None = None, wait: bool = True) -> int:
     ds, t = store.get_dataset(dataset_id), store.get_target(target_id)
     if not ds or not t:
         raise KeyError("dataset or target not found")
@@ -50,7 +52,7 @@ def start_run(store: Store, dataset_id: int, target_id: int, name: str | None = 
     return run_id
 
 
-def _safe(fn, *a):
+def _safe(fn: Callable[..., Any], *a: Any) -> None:
     try:
         fn(*a)
     except Exception:
@@ -171,13 +173,14 @@ def create_app(db_path: str | None = None, seed: bool = True) -> FastAPI:
         rows = store.results(run_id)
         if not rows:
             raise HTTPException(404, "No results")
-        metric_names = sorted({m for r in rows for m in (r["scores"] or {})})
+        scores: list[dict[str, Any]] = [r["scores"] or {} for r in rows]
+        metric_names = sorted({m for s in scores for m in s})
         buf = io.StringIO()
         w = csv.writer(buf)
         w.writerow(["case_id", "input", "output", "passed", "error", "latency_ms", *metric_names])
-        for r in rows:
+        for r, s in zip(rows, scores):
             w.writerow([r["case_id"], r["input"], r["output"], r["passed"], r["error"] or "", r["latency_ms"] or "",
-                        *[(r["scores"] or {}).get(m, {}).get("score", "") for m in metric_names]])
+                        *[s[m]["score"] if m in s else "" for m in metric_names]])
         return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv",
                                  headers={"Content-Disposition": f"attachment; filename=run-{run_id}.csv"})
 

@@ -16,13 +16,15 @@ import json
 import math
 import re
 from collections import Counter
+from collections.abc import Callable
+from typing import Any, cast
 
 from . import config
 from .llm import chat
 from .text import content_tokens, normalize, strip_code_fence, tokens
 
 
-def _expected(case) -> list[str]:
+def _expected(case: dict[str, Any]) -> list[str]:
     e = case.get("expected")
     if e is None or e == "":
         return []
@@ -31,7 +33,7 @@ def _expected(case) -> list[str]:
 
 # ---------------------------------------------------------------- reference-based
 
-def exact_match(case, out):
+def exact_match(case: dict[str, Any], out: str) -> dict[str, Any] | None:
     refs = _expected(case)
     if not refs:
         return None
@@ -39,7 +41,7 @@ def exact_match(case, out):
     return {"score": float(hit), "detail": "exact" if hit else "differs from reference"}
 
 
-def contains_expected(case, out):
+def contains_expected(case: dict[str, Any], out: str) -> dict[str, Any] | None:
     refs = _expected(case)
     if not refs:
         return None
@@ -57,7 +59,7 @@ def _f1(pred: list[str], ref: list[str]) -> float:
     return 2 * p * r / (p + r)
 
 
-def token_f1(case, out):
+def token_f1(case: dict[str, Any], out: str) -> dict[str, Any] | None:
     refs = _expected(case)
     if not refs:
         return None
@@ -77,7 +79,7 @@ def _lcs(a: list[str], b: list[str]) -> int:
     return prev[-1]
 
 
-def rouge_l(case, out):
+def rouge_l(case: dict[str, Any], out: str) -> dict[str, Any] | None:
     refs = _expected(case)
     if not refs:
         return None
@@ -92,18 +94,18 @@ def rouge_l(case, out):
     return {"score": round(best, 3), "detail": f"ROUGE-L {best:.2f}"}
 
 
-def _cosine(a: Counter, b: Counter) -> float:
+def _cosine(a: Counter[str], b: Counter[str]) -> float:
     dot = sum(a[k] * b[k] for k in a if k in b)
     na, nb = math.sqrt(sum(v * v for v in a.values())), math.sqrt(sum(v * v for v in b.values()))
     return dot / (na * nb) if na and nb else 0.0
 
 
-def _bow(s: str) -> Counter:
+def _bow(s: str) -> Counter[str]:
     t = content_tokens(s)
     return Counter(t + [f"{a}_{b}" for a, b in zip(t, t[1:])])
 
 
-def semantic_similarity(case, out):
+def semantic_similarity(case: dict[str, Any], out: str) -> dict[str, Any] | None:
     """Embedding cosine if EMBED_API_KEY is set, otherwise bag-of-words+bigrams cosine."""
     refs = _expected(case)
     if not refs:
@@ -120,8 +122,9 @@ def semantic_similarity(case, out):
 
 # ---------------------------------------------------------------- rule-based
 
-def keywords(case, out):
-    inc, exc = case.get("must_include") or [], case.get("must_not_include") or []
+def keywords(case: dict[str, Any], out: str) -> dict[str, Any] | None:
+    inc: list[str] = case.get("must_include") or []
+    exc: list[str] = case.get("must_not_include") or []
     if not inc and not exc:
         return None
     n = normalize(out)
@@ -130,7 +133,7 @@ def keywords(case, out):
     score = (len(inc) - len(missing)) / len(inc) if inc else 1.0
     if present_bad:
         score = 0.0
-    parts = []
+    parts: list[str] = []
     if missing:
         parts.append("missing: " + ", ".join(missing))
     if present_bad:
@@ -138,7 +141,7 @@ def keywords(case, out):
     return {"score": round(score, 3), "detail": "; ".join(parts) or "all keywords ok"}
 
 
-def regex_match(case, out):
+def regex_match(case: dict[str, Any], out: str) -> dict[str, Any] | None:
     pat = case.get("regex")
     if not pat:
         return None
@@ -149,23 +152,24 @@ def regex_match(case, out):
     return {"score": float(ok), "detail": "matched" if ok else f"no match for /{pat}/"}
 
 
-_TYPES = {"str": str, "int": int, "float": (int, float), "bool": bool, "list": list, "dict": dict}
+_TYPES: dict[str, type | tuple[type, ...]] = {"str": str, "int": int, "float": (int, float), "bool": bool, "list": list, "dict": dict}
 
 
-def json_valid(case, out):
-    schema = case.get("json_schema")
+def json_valid(case: dict[str, Any], out: str) -> dict[str, Any] | None:
+    schema: dict[str, Any] | None = case.get("json_schema")
     if schema is None:
         return None
     try:
-        data = json.loads(strip_code_fence(out))
+        data: Any = json.loads(strip_code_fence(out))
     except (json.JSONDecodeError, TypeError):
         return {"score": 0.0, "detail": "not valid JSON"}
-    req = (schema or {}).get("required", {})
+    req: dict[str, str] = (schema or {}).get("required", {})
     if not req:
         return {"score": 1.0, "detail": "valid JSON"}
     if not isinstance(data, dict):
         return {"score": 0.0, "detail": "JSON is not an object"}
-    bad = []
+    data = cast(dict[str, Any], data)
+    bad: list[str] = []
     for key, typ in req.items():
         if key not in data:
             bad.append(f"missing '{key}'")
@@ -181,7 +185,7 @@ REFUSAL_RE = re.compile(
     r"couldn'?t find that|don'?t have (?:that|this) information|not in (?:the|our) documents)\b", re.I)
 
 
-def refusal(case, out):
+def refusal(case: dict[str, Any], out: str) -> dict[str, Any] | None:
     if "should_refuse" not in case:
         return None
     refused = bool(REFUSAL_RE.search(out or ""))
@@ -194,7 +198,7 @@ def refusal(case, out):
     return {"score": float(ok), "detail": detail}
 
 
-def groundedness(case, out):
+def groundedness(case: dict[str, Any], out: str) -> dict[str, Any] | None:
     """Share of the answer's content words that also appear in the provided context.
     Low = the model added facts that are not in the retrieved passages (possible hallucination)."""
     ctx = case.get("context")
@@ -210,7 +214,7 @@ def groundedness(case, out):
             "detail": "fully grounded" if not unsupported else "unsupported words: " + ", ".join(unsupported[:8])}
 
 
-def citations(case, out):
+def citations(case: dict[str, Any], out: str) -> dict[str, Any] | None:
     if not case.get("context") or REFUSAL_RE.search(out or ""):
         return None
     ok = bool(re.search(r"\[\d+\]", out or ""))
@@ -225,12 +229,12 @@ PII_PATTERNS = {
 }
 
 
-def pii_leak(case, out):
+def pii_leak(case: dict[str, Any], out: str) -> dict[str, Any] | None:
     """Flags personal data in the output that was not already in the input/context."""
     allowed = f"{case.get('input', '')} {case.get('context', '')}"
-    found = []
+    found: list[str] = []
     for name, pat in PII_PATTERNS.items():
-        for m in pat.findall(out or ""):
+        for m in cast(list[str], pat.findall(out or "")):
             if m not in allowed:
                 found.append(name)
     return {"score": 0.0 if found else 1.0, "detail": ("leaked " + ", ".join(sorted(set(found)))) if found else "no PII"}
@@ -246,7 +250,7 @@ QUESTION: {q}
 RESPONSE: {a}"""
 
 
-def llm_judge(case, out):
+def llm_judge(case: dict[str, Any], out: str) -> dict[str, Any] | None:
     if not config.JUDGE_API_KEY:
         return None
     refs = _expected(case)
@@ -259,7 +263,7 @@ def llm_judge(case, out):
     if not raw:
         return None
     try:
-        data = json.loads(strip_code_fence(raw["text"]))
+        data: dict[str, Any] = json.loads(strip_code_fence(raw["text"]))
         s = max(1, min(5, int(round(float(data["score"])))))
     except (ValueError, KeyError, TypeError, json.JSONDecodeError):
         return {"score": 0.0, "detail": f"judge returned unparseable output: {raw['text'][:80]}"}
@@ -268,7 +272,9 @@ def llm_judge(case, out):
 
 # ---------------------------------------------------------------- registry
 
-METRICS = {
+Metric = Callable[[dict[str, Any], str], dict[str, Any] | None]
+
+METRICS: dict[str, tuple[Metric, float, str]] = {
     "exact_match": (exact_match, 1.0, "Output equals a reference (normalised)"),
     "contains_expected": (contains_expected, 1.0, "A reference answer appears inside the output"),
     "token_f1": (token_f1, 0.5, "Word-overlap F1 with the reference (SQuAD-style)"),
@@ -290,14 +296,15 @@ DEFAULT_METRICS = ["semantic_similarity", "keywords", "regex_match", "json_valid
                    "groundedness", "citations", "pii_leak", "llm_judge"]
 
 
-def evaluate(case: dict, output: str, metric_names: list[str], thresholds: dict | None = None) -> tuple[dict, bool]:
+def evaluate(case: dict[str, Any], output: str, metric_names: list[str],
+             thresholds: dict[str, float] | None = None) -> tuple[dict[str, Any], bool]:
     """Run metrics on one output. Returns ({name: {score, detail, passed}}, case_passed)."""
     thresholds = thresholds or {}
-    scores = {}
+    scores: dict[str, Any] = {}
     for name in metric_names:
         fn, default_t, _ = METRICS[name]
         try:
-            r = fn(case, output or "")
+            r: dict[str, Any] | None = fn(case, output or "")
         except Exception as e:  # a buggy metric must not kill the run
             r = {"score": 0.0, "detail": f"metric error: {e}"}
         if r is None:
