@@ -1,0 +1,8 @@
+{
+ "j1": "{\"patient_name\":\"Ravi Kumar\",\"specialty\":\"Dentist\",\"date\":\"2026-11-03\",\"time\":\"11:00\"}",
+ "j2": "```json\n{\"patient_name\":\"Sita\",\"specialty\":\"Dermatologist\",\"date\":\"2026-11-05\",\"time\":\"16:00\"}\n```",
+ "j3": "{\"patient_name\":\"Arjun\",\"specialty\":\"Pediatrician\",\"date\":\"tomorrow\",\"time\":\"10:00\"}",
+ "j4": "{\"patient_name\":\"Lakshmi\",\"specialty\":\"Gynecologist\",\"date\":\"2026-11-10\",\"time\":\"12:30\"}",
+ "j5": "Sure! Here is the JSON: {\"patient_name\": \"Kiran\", \"specialty\": \"General Physician\", \"date\": \"2026-11-04\"}",
+ "j6": "{\"patient_name\":\"Meena\",\"specialty\":\"Dentist\",\"date\":\"2026-11-07\",\"time\":15}"
+}

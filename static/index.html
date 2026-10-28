@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Evaluation Platform</title>
+<style>
+  :root { --bg:#f4f5f7; --card:#fff; --ink:#18202b; --muted:#667085; --line:#e4e7ec; --brand:#0e7490; --brand-ink:#fff;
+          --good:#067647; --good-bg:#ecfdf3; --bad:#b42318; --bad-bg:#fef3f2; --mid:#b54708; --chip:#f2f4f7; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0f1318; --card:#171c23; --ink:#e6e9ee; --muted:#98a2b3; --line:#28303b; --brand:#22b8cf; --brand-ink:#04171b;
+          --good:#47cd89; --good-bg:#0d2a1d; --bad:#f97066; --bad-bg:#2d1513; --mid:#fdb022; --chip:#222a35; } }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+  .wrap { max-width:1150px; margin:0 auto; padding:16px; }
+  header { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; margin-bottom:12px; }
+  h1 { font-size:20px; margin:0; } h2 { font-size:16px; margin:0 0 10px; } h3 { font-size:14px; margin:14px 0 8px; }
+  .sub { color:var(--muted); }
+  nav { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px; }
+  nav button { border:1px solid var(--line); background:var(--card); color:var(--ink); border-radius:8px; padding:7px 14px; font:inherit; cursor:pointer; }
+  nav button.on { background:var(--ink); color:var(--bg); border-color:var(--ink); }
+  section { display:none; } section.on { display:block; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:12px; }
+  .scroll { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-size:12px; font-weight:600; white-space:nowrap; }
+  td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
+  tr.click { cursor:pointer; } tr.click:hover td { background:var(--chip); }
+  .pill { display:inline-block; padding:1px 8px; border-radius:999px; font-size:12px; font-weight:600; }
+  .ok { color:var(--good); background:var(--good-bg); } .no { color:var(--bad); background:var(--bad-bg); }
+  .run-state { color:var(--mid); }
+  .bar { height:6px; background:var(--chip); border-radius:3px; overflow:hidden; min-width:80px; } .bar b { display:block; height:100%; background:var(--brand); }
+  .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:12px; }
+  .kpi { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; }
+  .kpi b { display:block; font-size:24px; font-variant-numeric:tabular-nums; } .kpi span { color:var(--muted); font-size:12px; }
+  .grid2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:12px; }
+  label { display:block; font-size:12px; color:var(--muted); margin:8px 0 4px; }
+  input, select, textarea { width:100%; font:inherit; padding:8px 10px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--ink); }
+  textarea { min-height:160px; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:end; } .row > div { flex:1; min-width:180px; }
+  button.p { background:var(--brand); color:var(--brand-ink); border:0; border-radius:8px; padding:9px 16px; font:inherit; font-weight:600; cursor:pointer; }
+  button.s { background:transparent; border:1px solid var(--line); color:var(--ink); border-radius:8px; padding:6px 10px; font:inherit; font-size:13px; cursor:pointer; }
+  .metric-checks { display:flex; flex-wrap:wrap; gap:6px 14px; margin-top:6px; }
+  .metric-checks label { display:flex; gap:6px; align-items:center; margin:0; color:var(--ink); font-size:13px; }
+  .metric-checks input { width:auto; }
+  .out { white-space:pre-wrap; word-break:break-word; max-width:420px; }
+  .detail { font-size:12px; color:var(--muted); }
+  .chip { display:inline-block; background:var(--chip); border-radius:6px; padding:1px 7px; margin:1px 3px 1px 0; font-size:12px; }
+  .delta-up { color:var(--good); font-weight:600; } .delta-down { color:var(--bad); font-weight:600; }
+  .msg { color:var(--muted); margin:6px 0; } .err { color:var(--bad); }
+  pre { white-space:pre-wrap; font-size:12px; background:var(--chip); padding:10px; border-radius:8px; margin:0; max-height:360px; overflow:auto; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><h1>AI Evaluation Platform</h1><span class="sub">Test LLM apps against datasets, catch hallucinations and regressions.</span></header>
+  <nav id="tabs">
+    <button data-t="runs" class="on">Runs</button><button data-t="detail">Run detail</button><button data-t="compare">Compare</button>
+    <button data-t="datasets">Datasets</button><button data-t="targets">Targets</button><button data-t="metrics">Metrics</button>
+  </nav>
+
+  <section id="runs" class="on">
+    <div class="card">
+      <h2>New run</h2>
+      <div class="row">
+        <div><label>Dataset</label><select id="nrDs"></select></div>
+        <div><label>Target (system under test)</label><select id="nrT"></select></div>
+        <div style="flex:0 0 auto"><button class="p" id="nrGo">Run evaluation</button></div>
+      </div>
+      <label>Metrics</label><div class="metric-checks" id="nrM"></div>
+      <p class="msg" id="nrMsg"></p>
+    </div>
+    <div class="card scroll"><table><thead><tr><th>#</th><th>Run</th><th>Status</th><th class="num">Cases</th><th>Pass rate</th><th class="num">p50 latency</th><th class="num">Cost</th><th>Created</th></tr></thead><tbody id="runRows"></tbody></table></div>
+  </section>
+
+  <section id="detail"><div id="detailBody"><p class="msg">Pick a run from the Runs tab.</p></div></section>
+
+  <section id="compare">
+    <div class="card row">
+      <div><label>Baseline (A)</label><select id="cmpA"></select></div>
+      <div><label>Candidate (B)</label><select id="cmpB"></select></div>
+      <div style="flex:0 0 auto"><button class="p" id="cmpGo">Compare</button></div>
+    </div>
+    <div id="cmpBody"></div>
+  </section>
+
+  <section id="datasets">
+    <div class="card">
+      <h2>Upload dataset</h2>
+      <div class="row">
+        <div><label>File (.jsonl, .json, .csv)</label><input type="file" id="dsFile" accept=".jsonl,.json,.csv"></div>
+        <div><label>Name (optional)</label><input id="dsName"></div>
+        <div style="flex:0 0 auto"><button class="p" id="dsUp">Upload</button></div>
+      </div>
+      <p class="msg" id="dsMsg">Each case needs <code>input</code>; optional: <code>id, expected, context, must_include, must_not_include, regex, json_schema, should_refuse, tags</code>.</p>
+    </div>
+    <div class="card scroll"><table><thead><tr><th>Name</th><th>Description</th><th class="num">Cases</th><th></th></tr></thead><tbody id="dsRows"></tbody></table></div>
+    <div id="dsView"></div>
+  </section>
+
+  <section id="targets">
+    <div class="grid2">
+      <div class="card">
+        <h2>Add target</h2>
+        <label>Name</label><input id="tName" placeholder="my-bot v3">
+        <label>Config (JSON)</label>
+        <textarea id="tCfg">{
+  "type": "openai",
+  "base_url": "https://api.groq.com/openai/v1",
+  "model": "llama-3.1-8b-instant",
+  "api_key_env": "GROQ_API_KEY",
+  "system_prompt": "Answer only from the context. Cite sources like [1].",
+  "temperature": 0
+}</textarea>
+        <div class="row" style="margin-top:8px"><button class="p" id="tAdd">Add target</button></div>
+        <p class="msg" id="tMsg">Types: <b>openai</b> (any OpenAI-compatible API), <b>http</b> (your own app's endpoint), <b>replay</b> (saved outputs).</p>
+      </div>
+      <div class="card scroll"><h2>Targets</h2><table><thead><tr><th>Name</th><th>Type</th><th>Details</th><th></th></tr></thead><tbody id="tRows"></tbody></table></div>
+    </div>
+  </section>
+
+  <section id="metrics"><div class="card scroll"><table><thead><tr><th>Metric</th><th class="num">Pass threshold</th><th>What it checks</th></tr></thead><tbody id="mRows"></tbody></table></div></section>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const el = (t, c, txt) => { const e = document.createElement(t); if (c) e.className = c; if (txt != null) e.textContent = txt; return e; };
+const pct = v => v == null ? '–' : Math.round(v * 100) + '%';
+async function api(path, opts = {}) {
+  const r = await fetch(path, { headers: opts.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }, ...opts });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.detail || r.statusText);
+  return j;
+}
+function tab(name) {
+  document.querySelectorAll('#tabs button, section').forEach(x => x.classList.remove('on'));
+  document.querySelector(`#tabs [data-t=${name}]`).classList.add('on'); $(name).classList.add('on');
+}
+document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => { tab(b.dataset.t); refresh(); });
+function bar(v) { const d = el('div', 'bar'); const b = el('b'); b.style.width = Math.round((v || 0) * 100) + '%'; d.appendChild(b); return d; }
+function tdNode(node, cls) { const td = el('td', cls); if (node instanceof Node) td.appendChild(node); else td.textContent = node ?? ''; return td; }
+function pass(ok) { return el('span', 'pill ' + (ok ? 'ok' : 'no'), ok ? 'pass' : 'fail'); }
+
+let METRICS = [], RUNS = [];
+async function refresh() {
+  const [ds, ts, runs] = await Promise.all([api('/api/datasets'), api('/api/targets'), api('/api/runs')]);
+  RUNS = runs;
+  const fill = (sel, items, label) => { const v = sel.value; sel.innerHTML = ''; items.forEach(i => { const o = el('option', null, label(i)); o.value = i.id; sel.appendChild(o); }); if (v) sel.value = v; };
+  fill($('nrDs'), ds, d => `${d.name} (${d.n_cases})`); fill($('nrT'), ts, t => `${t.name} [${t.config.type}]`);
+  const done = runs.filter(r => r.status === 'done');
+  fill($('cmpA'), done, r => `#${r.id} ${r.name}`); fill($('cmpB'), done, r => `#${r.id} ${r.name}`);
+  if (!$('cmpA').dataset.init && done.length > 1) {  // default to the newest pair of runs on the same dataset
+    for (const r of done) { const same = done.filter(x => x.dataset_id === r.dataset_id); if (same.length > 1) { $('cmpA').value = same[1].id; $('cmpB').value = same[0].id; break; } }
+    $('cmpA').dataset.init = 1;
+  }
+  const rows = $('runRows'); rows.innerHTML = '';
+  for (const r of runs) {
+    const tr = el('tr', 'click'); tr.onclick = () => showRun(r.id);
+    const s = r.summary || {};
+    const pr = el('div'); pr.style.display = 'flex'; pr.style.gap = '8px'; pr.style.alignItems = 'center'; pr.appendChild(bar(s.pass_rate)); pr.appendChild(el('span', null, pct(s.pass_rate)));
+    const st = r.status === 'done' ? 'done' : r.status === 'failed' ? 'failed: ' + (r.error || '') : `${r.status} ${r.progress}/${r.total}`;
+    [r.id, r.name, el('span', r.status === 'done' ? '' : 'run-state', st), r.total, pr, s.latency_ms ? s.latency_ms.p50 + ' ms' : '–', s.cost ? '$' + s.cost.toFixed(4) : '–', r.created_at]
+      .forEach((v, i) => tr.appendChild(tdNode(v, [0, 3, 5, 6].includes(i) ? 'num' : '')));
+    rows.appendChild(tr);
+  }
+  if (!runs.length) rows.innerHTML = '<tr><td colspan="8" class="msg">No runs yet.</td></tr>';
+  const dsr = $('dsRows'); dsr.innerHTML = '';
+  ds.forEach(d => { const tr = el('tr'); const v = el('button', 's', 'View'); v.onclick = () => viewDataset(d.id); const del = el('button', 's', 'Delete'); del.onclick = async () => { try { await api('/api/datasets/' + d.id, { method:'DELETE' }); refresh(); } catch (e) { $('dsMsg').textContent = e.message; } };
+    const act = el('div'); act.style.display = 'flex'; act.style.gap = '6px'; act.append(v, del); [d.name, d.description, d.n_cases, act].forEach((x, i) => tr.appendChild(tdNode(x, i === 2 ? 'num' : ''))); dsr.appendChild(tr); });
+  const tr_ = $('tRows'); tr_.innerHTML = '';
+  ts.forEach(t => { const tr = el('tr'); const c = t.config; const det = c.type === 'openai' ? `${c.model} · key from ${c.api_key_env || 'config'}` : c.type === 'http' ? c.url : c.predictions;
+    const del = el('button', 's', 'Delete'); del.onclick = async () => { try { await api('/api/targets/' + t.id, { method:'DELETE' }); refresh(); } catch (e) { $('tMsg').textContent = e.message; } };
+    [t.name, el('span', 'chip', c.type), det, del].forEach(x => tr.appendChild(tdNode(x))); tr_.appendChild(tr); });
+  if (runs.some(r => r.status === 'running' || r.status === 'queued')) setTimeout(refresh, 1200);
+}
+
+async function showRun(id) {
+  tab('detail'); const body = $('detailBody'); body.innerHTML = '<p class="msg">Loading…</p>';
+  const r = await api('/api/runs/' + id); const s = r.summary || {}; body.innerHTML = '';
+  const head = el('div', 'card'); head.appendChild(el('h2', null, `#${r.id} ${r.name}`));
+  head.appendChild(el('div', 'sub', `Dataset: ${r.dataset} · Target: ${r.target} · ${r.status}${r.finished_at ? ' · finished ' + r.finished_at : ''}`));
+  const exp = el('a', null, 'Export CSV'); exp.href = `/api/runs/${id}/export.csv`; exp.style.fontSize = '13px'; head.appendChild(exp); body.appendChild(head);
+  const k = el('div', 'kpis');
+  [[pct(s.pass_rate), 'Pass rate'], [`${s.passed ?? 0}/${s.cases ?? 0}`, 'Cases passed'], [s.errors ?? 0, 'Errors'], [s.latency_ms ? s.latency_ms.p50 + ' ms' : '–', 'p50 latency'], [s.tokens || 0, 'Tokens'], [s.cost ? '$' + s.cost.toFixed(4) : '$0', 'Cost']]
+    .forEach(([v, l]) => { const d = el('div', 'kpi'); d.append(el('b', null, v), el('span', null, l)); k.appendChild(d); });
+  body.appendChild(k);
+  const g = el('div', 'grid2');
+  const mc = el('div', 'card scroll'); mc.appendChild(el('h2', null, 'Metrics')); const mt = el('table'); mt.innerHTML = '<thead><tr><th>Metric</th><th class="num">Mean</th><th>Pass rate</th><th class="num">n</th></tr></thead>'; const mb = el('tbody');
+  Object.entries(s.metrics || {}).forEach(([m, v]) => { const tr = el('tr'); const pr = el('div'); pr.style.display = 'flex'; pr.style.gap = '8px'; pr.style.alignItems = 'center'; pr.append(bar(v.pass_rate), el('span', null, pct(v.pass_rate))); [m, v.mean.toFixed(2), pr, v.n].forEach((x, i) => tr.appendChild(tdNode(x, i === 1 || i === 3 ? 'num' : ''))); mb.appendChild(tr); });
+  mt.appendChild(mb); mc.appendChild(mt); g.appendChild(mc);
+  const tc = el('div', 'card scroll'); tc.appendChild(el('h2', null, 'By tag')); const tt = el('table'); tt.innerHTML = '<thead><tr><th>Tag</th><th>Pass rate</th><th class="num">n</th></tr></thead>'; const tb = el('tbody');
+  Object.entries(s.by_tag || {}).forEach(([t, v]) => { const tr = el('tr'); const pr = el('div'); pr.style.display = 'flex'; pr.style.gap = '8px'; pr.style.alignItems = 'center'; pr.append(bar(v.pass_rate), el('span', null, pct(v.pass_rate))); [t, pr, v.n].forEach((x, i) => tr.appendChild(tdNode(x, i === 2 ? 'num' : ''))); tb.appendChild(tr); });
+  tt.appendChild(tb); tc.appendChild(tt); g.appendChild(tc); body.appendChild(g);
+  const cc = el('div', 'card scroll'); const hdr = el('div', 'row'); hdr.style.justifyContent = 'space-between'; hdr.appendChild(el('h2', null, 'Cases'));
+  const f = el('select'); f.style.width = 'auto'; ['All cases', 'Failing only'].forEach(o => f.appendChild(el('option', null, o))); hdr.appendChild(f); cc.appendChild(hdr);
+  const ct = el('table'); ct.innerHTML = '<thead><tr><th>Case</th><th>Input</th><th>Output</th><th>Result</th><th>Why</th></tr></thead>'; const cb = el('tbody'); ct.appendChild(cb); cc.appendChild(ct); body.appendChild(cc);
+  const draw = () => { cb.innerHTML = ''; r.results.filter(x => f.value === 'All cases' || !x.passed).forEach(x => {
+    const tr = el('tr'); const why = el('div');
+    if (x.error) why.appendChild(el('div', 'err', x.error));
+    Object.entries(x.scores || {}).forEach(([m, v]) => { const line = el('div', 'detail'); const p = el('span', 'pill ' + (v.passed ? 'ok' : 'no'), `${m} ${v.score.toFixed(2)}`); line.append(p, document.createTextNode(' ' + v.detail)); if (!v.passed || f.value === 'All cases') why.appendChild(line); });
+    const tags = el('div'); (x.tags || []).forEach(t => tags.appendChild(el('span', 'chip', t)));
+    const cid = el('div'); cid.append(el('b', null, x.case_id), tags);
+    [cid, el('div', 'out', x.input), el('div', 'out', x.output), pass(x.passed), why].forEach(n => tr.appendChild(tdNode(n))); cb.appendChild(tr); }); };
+  f.onchange = draw; draw();
+}
+
+$('cmpGo').onclick = async () => {
+  const body = $('cmpBody'); body.innerHTML = '';
+  try {
+    const c = await api(`/api/compare?a=${$('cmpA').value}&b=${$('cmpB').value}`);
+    const k = el('div', 'kpis'); const d = c.pass_rate_delta;
+    [[pct(c.a.pass_rate), `A: #${c.a.id}`], [pct(c.b.pass_rate), `B: #${c.b.id}`], [(d >= 0 ? '+' : '') + Math.round(d * 100) + ' pts', 'Pass-rate change'], [c.fixed.length, 'Cases fixed'], [c.regressed.length, 'Regressions']]
+      .forEach(([v, l], i) => { const x = el('div', 'kpi'); const b = el('b', null, v); if (i === 2) b.className = d >= 0 ? 'delta-up' : 'delta-down'; if (i === 4 && c.regressed.length) b.className = 'delta-down'; x.append(b, el('span', null, l)); k.appendChild(x); });
+    body.appendChild(k);
+    const mc = el('div', 'card scroll'); mc.appendChild(el('h2', null, 'Metric means')); const t = el('table'); t.innerHTML = '<thead><tr><th>Metric</th><th class="num">A</th><th class="num">B</th><th class="num">Δ</th></tr></thead>'; const tb = el('tbody');
+    Object.entries(c.metrics).forEach(([m, v]) => { const tr = el('tr'); const dd = el('span', v.delta > 0 ? 'delta-up' : v.delta < 0 ? 'delta-down' : '', v.delta == null ? '–' : (v.delta > 0 ? '+' : '') + v.delta.toFixed(2));
+      [m, v.a?.toFixed(2) ?? '–', v.b?.toFixed(2) ?? '–', dd].forEach((x, i) => tr.appendChild(tdNode(x, i ? 'num' : ''))); tb.appendChild(tr); });
+    t.appendChild(tb); mc.appendChild(t); body.appendChild(mc);
+    const cc = el('div', 'card scroll'); cc.appendChild(el('h2', null, 'Case by case (changes first)')); const ct = el('table'); ct.innerHTML = '<thead><tr><th>Case</th><th>Input</th><th>A output</th><th>B output</th><th>A → B</th></tr></thead>'; const cb = el('tbody');
+    c.cases.forEach(x => { const tr = el('tr'); const ch = el('div'); ch.append(pass(x.a_passed), document.createTextNode(' → '), pass(x.b_passed));
+      [el('b', null, x.case_id), el('div', 'out', x.input), el('div', 'out', x.a_output), el('div', 'out', x.b_output), ch].forEach(n => tr.appendChild(tdNode(n))); cb.appendChild(tr); });
+    ct.appendChild(cb); cc.appendChild(ct); body.appendChild(cc);
+  } catch (e) { body.appendChild(el('p', 'err', e.message)); }
+};
+
+$('nrGo').onclick = async () => {
+  const metrics = [...document.querySelectorAll('#nrM input:checked')].map(i => i.value);
+  $('nrMsg').textContent = 'Starting…';
+  try { await api('/api/runs', { method:'POST', body: JSON.stringify({ dataset_id: +$('nrDs').value, target_id: +$('nrT').value, metrics }) }); $('nrMsg').textContent = 'Run started.'; refresh(); }
+  catch (e) { $('nrMsg').textContent = e.message; }
+};
+$('dsUp').onclick = async () => {
+  const f = $('dsFile').files[0]; if (!f) { $('dsMsg').textContent = 'Choose a file first.'; return; }
+  const fd = new FormData(); fd.append('file', f); fd.append('name', $('dsName').value);
+  try { const d = await api('/api/datasets', { method:'POST', body: fd }); $('dsMsg').textContent = `Added ${d.name} (${d.n_cases} cases).`; refresh(); } catch (e) { $('dsMsg').textContent = e.message; }
+};
+async function viewDataset(id) { const d = await api('/api/datasets/' + id); const v = $('dsView'); v.innerHTML = ''; const c = el('div', 'card'); c.appendChild(el('h2', null, d.name)); c.appendChild(el('pre', null, d.cases.map(x => JSON.stringify(x)).join('\n'))); v.appendChild(c); }
+$('tAdd').onclick = async () => {
+  let cfg; try { cfg = JSON.parse($('tCfg').value); } catch (e) { $('tMsg').textContent = 'Config is not valid JSON.'; return; }
+  try { await api('/api/targets', { method:'POST', body: JSON.stringify({ name: $('tName').value, config: cfg }) }); $('tMsg').textContent = 'Target added.'; refresh(); } catch (e) { $('tMsg').textContent = e.message; }
+};
+api('/api/metrics').then(ms => {
+  METRICS = ms;
+  ms.forEach(m => { const l = el('label'); const i = el('input'); i.type = 'checkbox'; i.value = m.name; i.checked = m.default; l.append(i, document.createTextNode(m.name)); l.title = m.description; $('nrM').appendChild(l);
+    const tr = el('tr'); [m.name, m.threshold, m.description].forEach((x, k) => tr.appendChild(tdNode(x, k === 1 ? 'num' : ''))); $('mRows').appendChild(tr); });
+});
+refresh();
+</script>
+</body>
+</html>

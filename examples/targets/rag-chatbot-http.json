@@ -1,0 +1,7 @@
+{
+  "type": "http",
+  "url": "http://localhost:8001/api/ask",
+  "method": "POST",
+  "body": {"session_id": "eval-{id}", "question": "{input}"},
+  "response_path": "answer"
+}
